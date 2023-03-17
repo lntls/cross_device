@@ -13,24 +13,13 @@ typedef MessageHandler = Future<Object?> Function(Object? message);
 abstract class CrossDeviceConnection {
   CrossDeviceConnection._();
 
-  static Future<CrossDeviceConnection> connect(CrossDevice device) async {
-    final channel = IOWebSocketChannel.connect(
-      Uri.parse('ws://${device.address.host}:${device.port}'),
-      pingInterval: const Duration(seconds: 10),
-      connectTimeout: const Duration(seconds: 10),
-    );
-    await channel.ready;
-    final connection = CrossDeviceConnectionImpl(channel);
-    try {
-      await connection.ping();
-    } catch (_) {
-      connection.close();
-      rethrow;
-    }
-    return connection;
+  static Future<CrossDeviceConnection> connect(CrossDevice device) {
+    return CrossDeviceConnectionImpl.connect(device);
   }
 
-  bool get isClosed;
+  int get id;
+
+  bool get isConnected;
 
   Future<void> get closed;
 
@@ -40,14 +29,34 @@ abstract class CrossDeviceConnection {
     Duration timeout = const Duration(seconds: 15),
   });
 
-  void setMessageHandler(String channel, MessageHandler? handle);
+  void setMessageHandler(String channel, MessageHandler? handler);
 
   void close();
 }
 
 class CrossDeviceConnectionImpl implements CrossDeviceConnection {
-  CrossDeviceConnectionImpl(this._channel) {
+  CrossDeviceConnectionImpl(this._channel, int? id) {
+    if (id != null) {
+      _id = id;
+    }
     _channel.stream.listen(_onData, onDone: _onDone);
+  }
+
+  static Future<CrossDeviceConnection> connect(CrossDevice device) async {
+    final channel = IOWebSocketChannel.connect(
+      Uri.parse('ws://${device.address.host}:${device.port}'),
+      pingInterval: const Duration(seconds: 10),
+      connectTimeout: const Duration(seconds: 10),
+    );
+    await channel.ready;
+    final connection = CrossDeviceConnectionImpl(channel, null);
+    try {
+      await connection._connect();
+    } catch (_) {
+      connection.close();
+      rethrow;
+    }
+    return connection;
   }
 
   final WebSocketChannel _channel;
@@ -59,17 +68,23 @@ class CrossDeviceConnectionImpl implements CrossDeviceConnection {
 
   final _closedCompleter = Completer<void>();
 
+
+  var _id = -1;
+
+  @override
+  int get id => 0;
+
   @override
   Future<void> get closed => _closedCompleter.future;
 
-  bool _isClosed = false;
+  bool _isConnected = true;
   @override
-  bool get isClosed => _isClosed;
+  bool get isConnected => _isConnected;
 
   Future<Object?> _handleInternalMessage(
       String channel, Object? message) async {
     switch (channel) {
-      case 'ping':
+      case '_connect':
         return null;
       default:
         throw UnimplementedError('Channel($channel)');
@@ -77,7 +92,7 @@ class CrossDeviceConnectionImpl implements CrossDeviceConnection {
   }
 
   void _onDone() {
-    _isClosed = true;
+    _isConnected = false;
     _closedCompleter.complete();
   }
 
@@ -91,7 +106,7 @@ class CrossDeviceConnectionImpl implements CrossDeviceConnection {
         if (handler == null) {
           _channel.sink.add(MessageCodec.instance.encode(Reply(
             replyId: message.replyId,
-            error: 'Couldnot find handler(${message.channel})',
+            error: 'Could not find handler(${message.channel})',
           )));
           return;
         }
@@ -164,8 +179,9 @@ class CrossDeviceConnectionImpl implements CrossDeviceConnection {
     });
   }
 
-  Future<void> ping() async {
-    await _sendMessage('ping', null, internal: true);
+  Future<void> _connect() async {
+    final result = await _sendMessage('connect', null, internal: true);
+    _id = result as int;
   }
 
   @override

@@ -40,13 +40,12 @@ class CrossDeviceServer {
 
   final OnConnection onConnection;
 
+  var _connectionId = 0;
+
   void _onConnection(WebSocketChannel channel, List<String>? protocols) {
-    final connection = CrossDeviceConnectionImpl(channel);
-    connection.ping().then<void>((_) {
-      onConnection(connection);
-    }).onError((error, stackTrace) {
-      connection.close();
-    });
+    final connectionId = ++_connectionId;
+    final connection = CrossDeviceConnectionImpl(channel, connectionId);
+    onConnection(connection);
   }
 
   Future<void> _start() async {
