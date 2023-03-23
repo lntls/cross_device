@@ -85,7 +85,7 @@ class CrossDeviceConnectionImpl implements CrossDeviceConnection {
       String channel, Object? message) async {
     switch (channel) {
       case '_connect':
-        return null;
+        return _id;
       default:
         throw UnimplementedError('Channel($channel)');
     }
@@ -180,7 +180,7 @@ class CrossDeviceConnectionImpl implements CrossDeviceConnection {
   }
 
   Future<void> _connect() async {
-    final result = await _sendMessage('connect', null, internal: true);
+    final result = await _sendMessage('_connect', null, internal: true);
     _id = result as int;
   }
 
